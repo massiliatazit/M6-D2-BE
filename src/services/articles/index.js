@@ -1,6 +1,8 @@
 const express = require("express")
+const mongoose = require("mongoose");
 
 const ArticleSchema = require("./schema")
+const ReviewSchema = require("../reviews/schema");
 
 const articlesRoute = express.Router()
 
@@ -72,6 +74,109 @@ articlesRoute.get("/", async (req, res, next) => {
       next(error)
     }
   })
+  articlesRoute.get("/:id/reviews", async (req, res) => {
+    try {
+      const reviews = await ArticleSchema.findById(req.params.id, { reviews: 1 });
+      res.status(200).send(reviews.reviews);
+    } catch (error) {
+      console.log(error);
+    }
+  });
   
+
+  articlesRoute.post("/:id", async (req, res) => {
+    try {
+      const newReview = new ReviewSchema(req.body);
+      const review = await newReview.save();
+    
+      const article = await ArticleSchema.findByIdAndUpdate(
+        req.params.id,
+      {
+          $push: {
+            reviews: req.body,
+          },
+        },
+        { runValidators: true, new: true }
+      );
+      res.status(201).send(article);
+    } catch (error) {
+      console.log(error);
+    }
+  });
+  articlesRoute.get("/:id/reviews/:reviewID", async (req, res) => {
+    try {
+      console.log('here')
+      const selectedReview = await ArticleSchema.findOne(
+        { _id: mongoose.Types.ObjectId(req.params.id) },
+        {
+          reviews: {
+            $elemMatch: { _id: mongoose.Types.ObjectId(req.params.reviewID) },
+          },
+        }
+      );
+      if (selectedReview) {
+        res.status(200).send(selectedReview.reviews[0]);
+      } else {
+        res
+          .status(404)
+          .send(`We couldn't find a review with the id ${req.params.reviewID}`);
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  });
+  
+  articlesRoute.put("/:id/reviews/:reviewID", async (req, res) => {
+    try {
+      const selectedReview = await ArticleSchema.findOne(
+        { _id: mongoose.Types.ObjectId(req.params.id) },
+        {
+          reviews: {
+            $elemMatch: { _id: mongoose.Types.ObjectId(req.params.reviewID) },
+          },
+        }
+      );
+      if (selectedReview) {
+        const newReview = { ...selectedReview.reviews[0], ...req.body };
+        const alteredReview = await ArticleSchema.findOneAndUpdate(
+          {
+            _id: mongoose.Types.ObjectId(req.params.id),
+            "reviews._id": mongoose.Types.ObjectId(req.params.reviewID),
+          },
+          {
+            $set: { "reviews.$": newReview },
+          },
+          {
+            runValidators: true,
+            new: true,
+          }
+        );
+        res.status(200).send(alteredReview);
+      } else {
+        res
+          .status(404)
+          .send(`We couldn't find a review with the id ${req.params.reviewID}`);
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  });
+  
+  articlesRoute.delete("/:id/reviews/:reviewID", async (req, res) => {
+    try {
+      const alteredReview = await ArticleSchema.findByIdAndUpdate(
+        req.params.id,
+        {
+          $pull: {
+            reviews: { _id: mongoose.Types.ObjectId(req.params.reviewID) },
+          },
+        },
+        { runValidators: true, new: true }
+      );
+      res.send(alteredReview);
+    } catch (error) {
+      console.log(error);
+    }
+  });
 
 module.exports = articlesRoute
